@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REST API Mock Request Builder</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen p-4">
+<h1 class="text-2xl font-bold text-cyan-400 mb-1 text-center">REST API Mock Request Builder</h1>
+<p class="text-center text-gray-400 text-sm mb-6">Build a request and auto-generate fetch() and curl snippets</p>
+
+<div class="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Left: builder -->
+  <div class="space-y-4">
+    <!-- Method + URL -->
+    <div class="bg-gray-900 rounded-xl border border-gray-700 p-4 space-y-3">
+      <div class="flex gap-2">
+        <div>
+          <label class="block text-xs text-gray-400 mb-1" for="selMethod">Method</label>
+          <select id="selMethod" class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-cyan-500">
+            <option value="GET" class="text-green-400">GET</option>
+            <option value="POST" selected class="text-blue-400">POST</option>
+            <option value="PUT" class="text-yellow-400">PUT</option>
+            <option value="PATCH" class="text-orange-400">PATCH</option>
+            <option value="DELETE" class="text-red-400">DELETE</option>
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="block text-xs text-gray-400 mb-1" for="inUrl">URL</label>
+          <input id="inUrl" type="text" value="https://api.example.com/users/1"
+            class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-cyan-500">
+        </div>
+      </div>
+    </div>
+
+    <!-- Headers -->
+    <div class="bg-gray-900 rounded-xl border border-gray-700 p-4">
+      <div class="flex justify-between items-center mb-3">
+        <div class="text-xs text-gray-400 uppercase tracking-wider">Headers</div>
+        <button id="btnAddHeader" class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition">+ Add</button>
+      </div>
+      <div id="headersList" class="space-y-2"></div>
+    </div>
+
+    <!-- Body -->
+    <div class="bg-gray-900 rounded-xl border border-gray-700 p-4">
+      <div class="flex justify-between items-center mb-3">
+        <div class="text-xs text-gray-400 uppercase tracking-wider">Request Body (JSON)</div>
+        <button id="btnFormatJson" class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition">Format JSON</button>
+      </div>
+      <textarea id="reqBody" rows="6" placeholder='{"key": "value"}'
+        class="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-cyan-500 resize-none"></textarea>
+      <div id="jsonError" class="text-xs text-red-400 mt-1 hidden"></div>
+    </div>
+
+    <button id="btnGenerate" class="w-full py-2.5 bg-cyan-700 hover:bg-cyan-600 rounded-lg font-semibold transition">Generate Snippets</button>
+  </div>
+
+  <!-- Right: output -->
+  <div class="space-y-4">
+    <!-- fetch() -->
+    <div class="bg-gray-900 rounded-xl border border-gray-700 p-4">
+      <div class="flex justify-between items-center mb-3">
+        <div class="text-xs text-gray-400 uppercase tracking-wider">fetch() JavaScript</div>
+        <button class="copyBtn text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition" data-target="fetchOutput">Copy</button>
+      </div>
+      <pre id="fetchOutput" class="text-xs font-mono text-green-300 whitespace-pre-wrap break-all bg-gray-800 rounded p-3 min-h-[100px]"></pre>
+    </div>
+
+    <!-- curl -->
+    <div class="bg-gray-900 rounded-xl border border-gray-700 p-4">
+      <div class="flex justify-between items-center mb-3">
+        <div class="text-xs text-gray-400 uppercase tracking-wider">curl Command</div>
+        <button class="copyBtn text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition" data-target="curlOutput">Copy</button>
+      </div>
+      <pre id="curlOutput" class="text-xs font-mono text-yellow-300 whitespace-pre-wrap break-all bg-gray-800 rounded p-3 min-h-[80px]"></pre>
+    </div>
+
+    <!-- Request Summary -->
+    <div class="bg-gray-900 rounded-xl border border-gray-700 p-4">
+      <div class="text-xs text-gray-400 uppercase tracking-wider mb-3">Request Summary</div>
+      <div id="summary" class="text-xs font-mono text-gray-300 space-y-1"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+let headers = [
+  { key: 'Content-Type', val: 'application/json' },
+  { key: 'Authorization', val: 'Bearer <token>' },
+];
+
+function renderHeaders() {
+  const el = document.getElementById('headersList');
+  el.innerHTML = '';
+  headers.forEach((h, i) => {
+    const row = document.createElement('div');
+    row.className = 'flex gap-2 items-center';
+    row.innerHTML = `
+      <input aria-label="Header key" value="${escapeHtml(h.key)}" data-i="${i}" data-field="key"
+        class="header-input flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-cyan-500" placeholder="Key">
+      <input aria-label="Header value" value="${escapeHtml(h.val)}" data-i="${i}" data-field="val"
+        class="header-input flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:border-cyan-500" placeholder="Value">
+      <button data-del="${i}" class="del-header text-red-500 hover:text-red-400 text-xs px-1">✕</button>
+    `;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('.header-input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      headers[e.target.dataset.i][e.target.dataset.field] = e.target.value;
+    });
+  });
+  el.querySelectorAll('.del-header').forEach(btn => {
+    btn.addEventListener('click', e => {
+      headers.splice(parseInt(e.target.dataset.del), 1);
+      renderHeaders();
+    });
+  });
+}
+
+document.getElementById('btnAddHeader').addEventListener('click', () => {
+  headers.push({ key: '', val: '' });
+  renderHeaders();
+});
+
+document.getElementById('btnFormatJson').addEventListener('click', () => {
+  const ta = document.getElementById('reqBody');
+  try {
+    ta.value = JSON.stringify(JSON.parse(ta.value), null, 2);
+    document.getElementById('jsonError').classList.add('hidden');
+  } catch(e) {
+    document.getElementById('jsonError').textContent = 'Invalid JSON: ' + e.message;
+    document.getElementById('jsonError').classList.remove('hidden');
+  }
+});
+
+function methodColor(m) {
+  return {GET:'text-green-400',POST:'text-blue-400',PUT:'text-yellow-400',PATCH:'text-orange-400',DELETE:'text-red-400'}[m]||'text-gray-300';
+}
+
+document.getElementById('btnGenerate').addEventListener('click', () => {
+  const method = document.getElementById('selMethod').value;
+  const url = document.getElementById('inUrl').value.trim();
+  const bodyRaw = document.getElementById('reqBody').value.trim();
+  const hasBody = bodyRaw && method !== 'GET';
+
+  // Validate JSON if present
+  if (hasBody) {
+    try { JSON.parse(bodyRaw); document.getElementById('jsonError').classList.add('hidden'); }
+    catch(e) {
+      document.getElementById('jsonError').textContent = 'Body JSON invalid: ' + e.message;
+      document.getElementById('jsonError').classList.remove('hidden');
+    }
+  }
+
+  const activeHeaders = headers.filter(h => h.key.trim());
+
+  // fetch snippet
+  const hObj = Object.fromEntries(activeHeaders.map(h => [h.key, h.val]));
+  const fetchParts = [`const response = await fetch(${JSON.stringify(url)}, {`];
+  fetchParts.push(`  method: ${JSON.stringify(method)},`);
+  if (activeHeaders.length) {
+    fetchParts.push(`  headers: ${JSON.stringify(hObj, null, 4).replace(/\n/g,'\n  ')},`);
+  }
+  if (hasBody) fetchParts.push(`  body: JSON.stringify(${JSON.stringify(JSON.parse(bodyRaw||'{}'), null, 4).replace(/\n/g,'\n  ')}),`);
+  fetchParts.push('});');
+  fetchParts.push('const data = await response.json();');
+  fetchParts.push('console.log(data);');
+  document.getElementById('fetchOutput').textContent = fetchParts.join('\n');
+
+  // curl snippet
+  const curlParts = [`curl -X ${method} \\`];
+  curlParts.push(`  ${JSON.stringify(url)} \\`);
+  activeHeaders.forEach(h => curlParts.push(`  -H ${JSON.stringify(h.key+': '+h.val)} \\`));
+  if (hasBody) curlParts.push(`  -d ${JSON.stringify(bodyRaw)} \\`);
+  const curl = curlParts.join('\n').replace(/ \\$/, '');
+  document.getElementById('curlOutput').textContent = curl;
+
+  // Summary
+  const sum = document.getElementById('summary');
+  sum.innerHTML = `
+    <div><span class="text-gray-500">Method: </span><span class="${methodColor(method)} font-bold">${escapeHtml(method)}</span></div>
+    <div><span class="text-gray-500">URL: </span><span class="text-cyan-300">${escapeHtml(url)}</span></div>
+    <div><span class="text-gray-500">Headers: </span><span class="text-gray-300">${activeHeaders.length}</span></div>
+    <div><span class="text-gray-500">Body: </span><span class="text-gray-300">${hasBody ? bodyRaw.length + ' chars' : 'none'}</span></div>
+  `;
+});
+
+document.querySelectorAll('.copyBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const text = document.getElementById(btn.dataset.target).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    });
+  });
+});
+
+// Default body
+document.getElementById('reqBody').value = JSON.stringify({ name: 'John Doe', email: 'john@example.com' }, null, 2);
+renderHeaders();
+document.getElementById('btnGenerate').click();
+</script>
+</body>
+</html>
